@@ -47,9 +47,38 @@ cd mcp-sse-proxy
 pip install -r requirements.txt
 ```
 
+### Claude AI configuration
+- Windows Config location: `C:\Users\<USERNAME>\AppData\Roaming\Claude\claude_desktop_config`<br>
+[or open via clinent menu: `File->Settings` then `Developer`->`Edit Config`]
+
+Config example for Windows:
+```json
+{
+  "globalShortcut": "",
+  "mcpServers": {
+    "mcp-sse-proxy": {
+      "command": "C:\\Users\\<USERNAME>\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+      "args": [
+        "C:\\mcp-sse-proxy-claude\\src\\mcp_sse_proxy.py",
+		"--base-url", "http://<IP_ADDRESS>:8000",
+		"--debug-enabled"
+      ],
+	  "env": {
+		  "RESOURCE_OPENAI_API_KEY": "sk-xxx",
+		  "RESOURCE_BRAVE_API_KEY": "BSAxxxx"
+	  }
+    }
+  }
+}
+```
+- MacOS Config Location: `~/Library/Application Support/Claude/claude_desktop_config.json`
+```json
+{}
+```
+
 ## Quick Start
 
-### Basic Run
+### Basic Run (use .env to populate environment variables)
 ```bash
 python src/mcp_sse_proxy.py
 ```
@@ -100,6 +129,7 @@ The MCP SSE Proxy connects to a remote server and proxies events to a local MCP 
   - **Behavior**: Creates `mcp_sse_proxy_debug.log` when enabled
   - **Example**: 
     ```bash
+    export MCP_SSE_PROXY_BASE_URL=http://127.0.0.1:8000
     export MCP_SSE_PROXY_DEBUG=True
     python src/mcp_sse_proxy.py
     ```
@@ -107,12 +137,11 @@ The MCP SSE Proxy connects to a remote server and proxies events to a local MCP 
 #### Resource Subscription
 - **`RESOURCE_*` Prefix**
   - **Description**: Environment variables sent to the server as resources
-  - **Behavior**: Prefix is removed before sending
+  - **Behavior**: Prefix [RESOURCE_] will be removed before sending to server
   - **Example**: 
     ```bash
     export RESOURCE_OPENAI_API_KEY=your_api_key
     export RESOURCE_CUSTOM_CONFIG=some_value
-    python src/mcp_sse_proxy.py
     ```
 
 ### .env File Configuration
@@ -120,6 +149,7 @@ Create a `.env` file in the project root:
 
 ```
 MCP_SSE_PROXY_DEBUG=True
+MCP_SSE_PROXY_BASE_URL=http://127.0.0.1:8000
 RESOURCE_OPENAI_API_KEY=your_api_key
 RESOURCE_CUSTOM_CONFIG=some_value
 ```
@@ -142,9 +172,13 @@ You can also configure the proxy programmatically by modifying the `SseClient` p
 ## Logging
 
 ### Debug Logging
-- Enabled via `MCP_SSE_PROXY_DEBUG` or `--debug-enabled`
-- Logs stored in `mcp_sse_proxy_debug.log`
-- Provides detailed information about SSE connections, tool calls, and system events
+- Note that by design MCP SSE Proxy will not print any messages after running in CLI mode. As by design, [MCP will not log anything to STDIO, as this will interfere with protocol operation.](https://modelcontextprotocol.io/docs/tools/debugging#implementing-logging)
+- Thats why, for more details - enabled via `MCP_SSE_PROXY_DEBUG` or `--debug-enabled` debug file.
+- Logs stored in `mcp_sse_proxy_debug.log` by default in same folder where mcp_sse_proxy.exe is located.
+- Provides detailed information about SSE connections, tool calls, and system events (in debug file, you will see both side of connection messages - MCP and SSE)
+
+
+⚠️ **Warning**: Enabling debug logging may expose sensitive information in logs. ⚠️
 
 ## Contributing
 Contributions are welcome! Please follow these steps:
@@ -153,6 +187,9 @@ Contributions are welcome! Please follow these steps:
 3. Commit your changes
 4. Push to the branch
 5. Create a Pull Request
+
+## FAQ
+
 
 ## License
 MIT
