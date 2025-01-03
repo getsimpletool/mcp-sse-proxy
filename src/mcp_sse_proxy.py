@@ -2,7 +2,7 @@
 name: MCP SSE Proxy
 description: Proxy SSE events from a remote server to a local MCP server.
 author: Nchekwa. Artur Zdolinski
-version: 0.0.1
+version: 0.0.2
 date: 2025-01-03
 requirements: mcp, httpx, python-dotenv
 """
@@ -63,8 +63,7 @@ def setup_logging(enable_file_logging: bool = False):
     if enable_file_logging:
         handlers.append(
             logging.FileHandler(
-                os.path.join(os.path.dirname(os.path.abspath(
-                    __file__)), 'mcp_sse_proxy_debug.log'),
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mcp_sse_proxy_debug.log'),
                 mode='w',
                 encoding='utf-8'
             )
@@ -109,16 +108,19 @@ class SseClient:
     # [Proxy]----SSE--->[SSE Server]
     async def connect(self):
         try:
-            logger.info(
-                "Attempting to connect to SSE server at %s", self.sse_url)
+            logger.info("Attempting to connect to SSE server at %s", self.sse_url)
 
-            # Create HTTP client timeouts
+            # Create HTTP client timeouts (None is default / just for testing)
+            # docs: HTTPX is careful to enforce timeouts everywhere by default. The default behavior is to raise a TimeoutException after 5 seconds of network inactivity.
             timeout = httpx.Timeout(
-                connect=30.0,     # connection timeout
-                read=30.0,        # read timeout
-                write=10.0,       # write timeout
-                pool=5.0          # pool timeout
+                connect=None,     # connection timeout
+                read=None,        # read timeout
+                write=None,       # write timeout
+                pool=None         # pool timeout
             )
+
+            # A client with a 60s timeout for connecting, and a 10s timeout elsewhere.
+            timeout = httpx.Timeout(10.0, connect=60.0)
 
             # Create HTTP client
             self.http_client = httpx.AsyncClient(
@@ -136,7 +138,7 @@ class SseClient:
             write_stream, write_stream_reader = anyio.create_memory_object_stream(0)
 
             # Start SSE reader and writer tasks
-            # Read from SSE   [SSE Server] ----> [Proxy]   -> from /sse
+            # Read from SSE   [SSE_SERVER] ----> [Proxy]   -> from /sse
             asyncio.create_task(self._sse_reader(read_stream_writer))
             # Send to STDIO [STDIO Client] ----> [Proxy]   -> to /messages
             asyncio.create_task(self._message_sender(write_stream_reader))
@@ -144,12 +146,9 @@ class SseClient:
             # Create client session
             try:
                 logger.info("Create SSE - STDIO session")
-                self.session = await self.exit_stack.enter_async_context(
-                    ClientSession(read_stream, write_stream)
-                )
+                self.session = await self.exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
                 if self.session is None:
-                    logger.error(
-                        "Failed to create ClientSession: session is None")
+                    logger.error("Failed to create ClientSession: session is None")
                     raise ValueError("ClientSession creation failed")
 
                 logger.info("⏳ Client session initialized")
@@ -161,11 +160,9 @@ class SseClient:
                 if self.session:
                     await self._send_environment_variables()
                 else:
-                    logger.error(
-                        "Cannot send environment variables: session is None")
+                    logger.error("Cannot send environment variables: session is None")
             except Exception as session_error:
-                logger.error(
-                    "Error creating or initializing client session: %s", session_error)
+                logger.error("Error creating or initializing client session: %s", session_error)
                 raise
 
             await self._session_id_event.wait()
@@ -194,8 +191,7 @@ class SseClient:
 
             # Ensure session is not None before proceeding
             if self.session is None:
-                logger.warning(
-                    "Cannot send environment variables: session is None")
+                logger.warning("Cannot send environment variables: session is None")
                 return
 
             # Subscribe to each environment variable as a separate resource
@@ -208,19 +204,16 @@ class SseClient:
                     query=f"session_id={self._session_id}"
                 )
 
-                subscribe_request = SubscribeRequest(
-                    method="resources/subscribe", params=SubscribeRequestParams(uri=env_uri))
+                subscribe_request = SubscribeRequest(method="resources/subscribe", params=SubscribeRequestParams(uri=env_uri))
                 request = ClientRequest(subscribe_request)
                 await self.session.send_request(request, result_type=EmptyResult)
 
-                logger.debug(
-                    "Subscribed to environment variable: %s=%s", key, value)
+                logger.debug("Subscribed to environment variable: %s=%s", key, value)
                 env_res.append(env_uri)
         except Exception as e:
-            logger.warning(
-                "Failed to subscribe to environment variables: %s", e)
+            logger.warning("Failed to subscribe to environment variables: %s", e)
 
-    # [PROXY] <-----SSE---- [SSE Server]
+    # [PROXY] <-----SSE---- [SSE_SERVER]
     async def _sse_reader(self, writer: MemoryObjectSendStream):
         attempt = 0
         while True:
@@ -230,8 +223,7 @@ class SseClient:
                     attempt = 0  # Reset attempt counter on successful connection
 
                     async for event in event_source.aiter_sse():
-                        logger.debug(
-                            "[PROXY]<---SSE----[SSE Server]: %s", event)
+                        logger.debug("[PROXY]<---SSE----[SSE_SERVER]: %s", event)
                         if not event:
                             continue
 
@@ -241,8 +233,7 @@ class SseClient:
                             self._last_ping = current_time
                             # Send ping response to keep connection alive
                             try:
-                                url = f"{self.messages_url}?session_id={
-                                    self._session_id}"
+                                url = f"{self.messages_url}?session_id={self._session_id}"
                                 data = {"jsonrpc": "2.0",
                                         "method": "ping",
                                         "id": str(time.time()),
@@ -250,29 +241,24 @@ class SseClient:
                                 await self.http_client.post(
                                     url,
                                     json=data,
-                                    headers={
-                                        'Content-Type': 'application/json'}
+                                    headers={'Content-Type': 'application/json',
+                                             'Connection': 'keep-alive'}
                                 )
-                                logger.debug(
-                                    "[PROXY]---SRDIO--->[MCP CLIENT]: %s", data)
+                                logger.debug("[PROXY]---SRDIO--->[MCP_CLIENT]: %s", data)
                             except httpx.HTTPStatusError as http_error:
                                 if http_error.response.status_code == 404:
-                                    logger.warning(
-                                        "Server session not found (404). Server might have been restarted.")
+                                    logger.warning("Server session not found (404). Server might have been restarted.")
                                     # Break the SSE connection to trigger reconnect
                                     break
-                                logger.warning(
-                                    "Failed to send ping: %s", http_error)
+                                logger.warning("Failed to send ping: %s", http_error)
                             except Exception as e:
                                 logger.warning("Failed to send ping: %s", e)
                             continue
 
                         # Handle sesssion_id messages
                         if event.data and event.data.startswith('/messages?session_id='):
-                            self._session_id = event.data.split(
-                                'session_id=')[1].split('&')[0]
-                            logger.info("🆔 Received session ID: %s",
-                                        self._session_id)
+                            self._session_id = event.data.split('session_id=')[1].split('&')[0]
+                            logger.info("Received session ID: %s", self._session_id)
                             self._session_id_event.set()
                             continue
 
@@ -280,85 +266,81 @@ class SseClient:
                         try:
                             # Parse JSON-RPC message
                             # logger.warning("Raw event data to parse: %s", repr(event.data))  # Add this line to see exact raw data
-                            event_data = JSONRPCMessage.model_validate_json(
-                                event.data)
-                            logger.debug(
-                                "[PROXY]---STDIO-->[MCP CLIENT]: %s", event_data)
+                            event_data = JSONRPCMessage.model_validate_json(event.data)
+                            logger.debug("[PROXY]---STDIO-->[MCP_CLIENT]: %s", event_data)
                             await writer.send(event_data)
                         except Exception as e:
-                            logger.warning(
-                                "Failed to parse JSON-RPC message: %s", e)
+                            logger.warning("Failed to parse JSON-RPC message: %s", e)
                             logger.warning("Event not handled: %s", event)
 
             except httpx.ReadTimeout:
-                logger.debug(
-                    "SSE connection timed out %s: reconnecting...", BASE_URL)
+                logger.debug("SSE connection timed out %s: reconnecting...", BASE_URL)
                 await self._retry_with_backoff(attempt)
                 attempt += 1
                 continue
 
             except httpx.ReadError as e:
-                logger.warning(
-                    "SSE read error %s: %s reconnecting...", BASE_URL, e)
+                logger.warning("SSE read error %s: %s reconnecting...", BASE_URL, e)
                 await self._retry_with_backoff(attempt)
                 attempt += 1
                 continue
 
             except Exception as e:
-                logger.error(
-                    "Unexpected error in SSE reader %s: %s", BASE_URL, e)
+                logger.error("Unexpected error in SSE reader %s: %s", BASE_URL, e)
                 await self._retry_with_backoff(attempt)
                 attempt += 1
                 continue
 
-    # [MCP Client] ----STDIO---> [PROXY]
-
+    # [MCP_CLIENT] ----STDIO---> [PROXY]
     async def _message_sender(self, reader: MemoryObjectReceiveStream):
+        attempt = 0
+        max_attempts = 5
         try:
             async with reader:
                 async for jsonrpc_message in reader:
-                    logger.debug(
-                        "[PROXY]<--STDIO---[MCP CLIENT]: %s", jsonrpc_message)
+                    logger.debug("[PROXY]<--STDIO---[MCP_CLIENT]: %s", jsonrpc_message)
                     if isinstance(jsonrpc_message, JSONRPCMessage):
                         try:
                             # Wait for session_id before sending any messages
                             await self._session_id_event.wait()
-
                             headers = {
                                 'Content-Type': 'application/json',
-                                'Accept': 'application/json'
+                                'Accept': 'application/json',
+                                'Connection': 'keep-alive'
                             }
                             data = jsonrpc_message.model_dump(mode='json')
-                            url = f"{self.messages_url}?session_id={
-                                self._session_id}"
-                            logger.debug("[PROXY]----SSE--->[SSE CLIENT]: %s?session_id=%s  %s",
-                                         self.messages_url, self._session_id, data)
+                            url = f"{self.messages_url}?session_id={self._session_id}"
+                            logger.debug("[PROXY]----SSE--->[SSE_SERVER]: %s?session_id=%s  %s", self.messages_url, self._session_id, data)
 
-                            response = await self.http_client.post(
-                                url,
-                                json=data,
-                                headers=headers
-                            )
-                            try:
-                                if response.status_code == 200:
-                                    if hasattr(self, 'debug'):
-                                        logger.debug(
-                                            "[PROXY]---STDIO-->[MCP CLIENT]: %s", response.text)
-                                else:
-                                    logger.error(
-                                        "Unexpected status code when sending message: %s %s", response.text, response.status_code)
-                            except httpx.HTTPStatusError as http_error:
-                                logger.error(
-                                    "HTTP error occurred while sending message: %s", str(http_error))
-                            except httpx.RequestError as e:
-                                logger.error(
-                                    "Error sending message: %s", str(e))
+                            while attempt < max_attempts:
+                                try:
+                                    response = await self.http_client.post(
+                                        url,
+                                        json=data,
+                                        headers=headers
+                                    )
+
+                                    if response.status_code in (200, 202):
+                                        if hasattr(self, 'debug'):
+                                            logger.debug("[PROXY]---STDIO-->[MCP_CLIENT]: %s", response.text)
+                                        break  # Successful send, exit retry loop
+
+                                    logger.error("Unexpected status code when sending message: %s %s", response.text, response.status_code)
+                                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                                    attempt += 1
+
+                                except (httpx.HTTPStatusError, httpx.RequestError, httpx.ReadError) as http_error:
+                                    logger.warning("Connection error on attempt %s: %s", attempt, http_error)
+                                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                                    attempt += 1
+                                    if attempt >= max_attempts:
+                                        logger.error("Failed to send message after %s attempts", max_attempts)
+                                        break
+
                         except Exception as e:
-                            logger.error(
-                                "Unexpected error while sending message: %s", str(e))
+                            logger.error("Unexpected error while sending message: %s", str(e))
                     else:
-                        logger.error(
-                            "Error in JSON-RPC message: %s", jsonrpc_message)
+                        logger.error("Error in JSON-RPC message: %s", jsonrpc_message)
         except Exception as e:
             logger.error("Error in message sender: %s", str(e))
 
@@ -393,8 +375,7 @@ class SseClient:
         if self.session:
             try:
                 params = GetPromptRequestParams(name=name, arguments=arguments)
-                prompts_get = GetPromptRequest(
-                    method="prompts/get", params=params)
+                prompts_get = GetPromptRequest(method="prompts/get", params=params)
                 request = ClientRequest(prompts_get)
                 logger.info("Getting prompt '%s' from server", name)
                 response = await self.session.send_request(request, result_type=GetPromptResult)
@@ -406,8 +387,7 @@ class SseClient:
 
     async def call_tool(self, tool_name: str, arguments: Optional[dict] = None) -> List[Union[TextContent, ImageContent, EmbeddedResource]]:
         if not self.session:
-            logger.warning(
-                "Attempting to call tool %s without an established connection", tool_name)
+            logger.warning("Attempting to call tool %s without an established connection", tool_name)
             raise RuntimeError("Not connected to server")
 
         if arguments is None:
@@ -418,8 +398,7 @@ class SseClient:
 
         async def try_call_tool():
             try:
-                logger.info("Calling tool: %s with arguments: %s",
-                            tool_name, arguments)
+                logger.info("Calling tool: %s with arguments: %s", tool_name, arguments)
                 if not self.session:
                     raise RuntimeError("Session is None, cannot call tool")
                 result = await self.session.call_tool(tool_name, arguments)
@@ -439,52 +418,41 @@ class SseClient:
                         elif isinstance(item, EmbeddedResource):
                             decoded_content.append(item)
                         else:
-                            raise RuntimeError(f"Invalid content type in response from tool {
-                                               tool_name}: {type(item)}")
+                            raise RuntimeError(f"Invalid content type in response from tool {tool_name}: {type(item)}")
 
                     # Log response for debugging
                     for item in decoded_content:
                         if isinstance(item, TextContent):
-                            logger.debug(
-                                "Tool response: Text content - Type: %s, Text: %s...", item.type, item.text[:100])
+                            logger.debug("Tool response: Text content - Type: %s, Text: %s...", item.type, item.text[:100])
                         elif isinstance(item, ImageContent):
-                            logger.debug(
-                                "Tool response: Image content - Type: %s, Format: %s", item.type, item.mimeType)
+                            logger.debug("Tool response: Image content - Type: %s, Format: %s", item.type, item.mimeType)
                         elif isinstance(item, EmbeddedResource):
-                            logger.debug(
-                                "Tool response: Embedded resource - Type: %s, Mime: %s", item.type, item.resource)
+                            logger.debug("Tool response: Embedded resource - Type: %s, Mime: %s", item.type, item.resource)
                         else:
-                            logger.debug(
-                                "Tool response: Unknown content type - %s", type(item))
+                            logger.debug("Tool response: Unknown content type - %s", type(item))
                     return decoded_content
-                else:
-                    error_msg = result.content[0].text if isinstance(
-                        result.content[0], TextContent) else "Unknown error"
-                    logger.error("Tool %s call failed: %s",
-                                 tool_name, error_msg)
-                    raise RuntimeError(error_msg)
+
+                error_msg = result.content[0].text if isinstance(result.content[0], TextContent) else "Unknown error"
+                logger.error("Tool %s call failed: %s", tool_name, error_msg)
+                raise RuntimeError(error_msg)
 
             except httpx.HTTPStatusError as http_error:
                 if http_error.response.status_code == 404:
-                    logger.warning(
-                        "Server session not found (404). Server might have been restarted.")
+                    logger.warning("Server session not found (404). Server might have been restarted.")
                     # Reset session and try to reconnect
                     self._session_id = None
                     self._session_id_event.clear()
                     try:
                         await self.connect()
                     except Exception as e:
-                        raise RuntimeError(
-                            f"Failed to reconnect to server: {e}") from e
+                        raise RuntimeError(f"Failed to reconnect to server: {e}") from e
                     # Retry the tool call after reconnecting
                     if not self.session:
-                        raise RuntimeError(
-                            "Failed to reconnect to server") from http_error
+                        raise RuntimeError("Failed to reconnect to server") from http_error
                     return await try_call_tool()
                 raise
             except Exception as e:
-                logger.error("Error calling tool %s: %s",
-                             tool_name, e, exc_info=True)
+                logger.error("Error calling tool %s: %s", tool_name, e, exc_info=True)
                 raise
 
         return await try_call_tool()
@@ -492,6 +460,7 @@ class SseClient:
     async def close(self):
         try:
             if self.http_client:
+                logger.info("Closing HTTP client...")
                 await self.http_client.aclose()
             await self.exit_stack.aclose()
         except Exception as e:
@@ -515,8 +484,7 @@ async def serve(custom_server_name: str = "client-sse", server_connection: Optio
         logger.info("list_tools() method called")
         if len(server_connection.remote_tools) == 0:
             server_connection.remote_tools = await server_connection.list_tools()
-        logger.info("Returning %s remote tools",
-                    len(server_connection.remote_tools))
+        logger.info("Returning %s remote tools", len(server_connection.remote_tools))
         return server_connection.remote_tools
 
     @server.call_tool()
@@ -549,6 +517,7 @@ async def serve(custom_server_name: str = "client-sse", server_connection: Optio
             logger.info("Server run completed")
     finally:
         if server_connection:
+            logger.info("Closing server connection...")
             await server_connection.close()
 
 

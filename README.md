@@ -188,7 +188,7 @@ Contributions are welcome! Please follow these steps:
 4. Push to the branch
 5. Create a Pull Request
 
-## FAQ
+## FAQ Q&A
 
 
 ## License
@@ -197,5 +197,4 @@ MIT
 ## Authors
 - Nchekwa. Artur Zdolinski
 
-**Version**: 0.0.1
-**Date**: 2025-01-03
+
