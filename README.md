@@ -2,7 +2,7 @@
 
 ## Description
 
-This script acts as a proxy between an MCP (Message Channel Protocol) server using STDIO (standard input/output) transport and a client using SSE (Server-Sent Events) transport. It bridges the communication gap by converting MCP STDIO communication to the SSE protocol, enabling real-time data streaming over web connections.
+This script acts as a proxy between an MCP (Model Context Protocol) server using STDIO (standard input/output) transport and a client using SSE (Server-Sent Events) transport. It bridges the communication gap by converting MCP STDIO communication to the SSE protocol, enabling real-time data streaming over web connections.
 
 **Communication Diagram:**
 
