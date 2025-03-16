@@ -2,27 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/),
-and this project adheres to [MCP SSE Proxy](https://github.com/nchekwa/mcp-sse-proxy).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.0.2] - 2025-01-03
-
-### Fixed
-- Proxy Report Error: "Unexpected status code when sending message: Accepted 202" should be handled, as it's currently not.
-- Debug Message Error: The debug message should use "SSE_SERVER" instead of "SSE CLIENT."
-- Consistency: Replace "SSE Server" with "SSE_SERVER" for consistency.
-- Default Timeout: Implement a default timeout setting in the configuration for all timeouts.
-- Keep-Alive: Add keep-alive functionality to maintain open TCP sessions.
-- Session Retry: Implement a session retry mechanism to handle cases where there's no response from the server.
-
-## [0.0.1] - 2025-01-03
+## [0.1.2] - 2025-03-15
 
 ### Added
+- Project rewritten from scratch.
 
-- INIT Project
-- This CHANGELOG file 
-- README
-- LICENSE
-
-
-[0.0.1]: https://github.com/nchekwa/mcp-sse-proxy/releases/tag/v0.0.1
+### Changes
+- Connect to SSE endpoint only when it will get STDIO initialize message.
+- Support passing selected environment variables as tool arg[env].
+- Support ping event to keep connection alive.
+- Small code - below 200 lines - match `simple`[`KISS`] concept.
