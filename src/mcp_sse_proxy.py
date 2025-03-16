@@ -326,6 +326,11 @@ class Proxy:
                 tg.start_soon(ping_checker, ping_interval)
 
 
-if __name__ == "__main__":
+def main():
+    """Entry point for the console script."""
     proxy = Proxy()
     asyncio.run(proxy.main())
+
+
+if __name__ == "__main__":
+    main()

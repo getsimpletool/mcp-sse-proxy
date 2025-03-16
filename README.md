@@ -28,10 +28,23 @@ flowchart LR
 
 To run the MCP SSE Proxy, execute the `mcp_sse_proxy.py` script with the required `--sse-url` or `ST_PROXY_SSE_URL` environment variable, which specifies the URL of your SSE server endpoint. This is the only required mandatory parameter.
 
-### Before you start
-If you do installation by copy-past, remember to **Install Dependencies**:
+
+
+### Installation
+
 ```bash
-pip install -r requirements.txt
+pip3 install mcp-sse-proxy
+python3 -m mcp_sse_proxy -h
+```
+
+The package installer (pip) creates an executable script in the bin directory of your virtual environment (or Python installation). If you are in a virtual environment, you can run the script using directly as a command.
+```bash
+mcp-sse-proxy -h
+```
+### Before you start
+If you do installation by copy-past, remember to install dependencies:
+```bash
+pip3 install -r requirements.txt
 ```
 
 ## Configuration
