@@ -220,7 +220,7 @@ class Proxy:
                                 continue
 
                             logger.debug("Received SSE chunk of size: %d", len(chunk))
-                            buffer += chunk
+                            buffer += chunk.replace("\r\n", "\n")
                             while "\n\n" in buffer:
                                 event, buffer = buffer.split("\n\n", 1)
                                 event_lines = event.strip().split("\n")

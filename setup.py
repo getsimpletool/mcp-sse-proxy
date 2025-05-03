@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='mcp-sse-proxy',
-    version='0.1.3',
+    version='0.1.4',
     description='Proxy between MCP server using STDIO transport and client using SSE transport',
     author='Artur Zdolinski',
     author_email='artur@zdolinski.com',
